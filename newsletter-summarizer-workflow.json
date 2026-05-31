@@ -1,0 +1,888 @@
+{
+  "name": "Newsletter Summarizer Agent \u2014 Abhinav",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "newsletter-digest",
+        "formTitle": "Newsletter Digest",
+        "formDescription": "Fetch, summarize and deliver newsletters to Telegram.\nLeave dates blank for yesterday \u2192 today (1-day digest).",
+        "responseMode": "onReceived",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "start_date",
+              "fieldLabel": "Start Date",
+              "fieldType": "date",
+              "defaultValue": "",
+              "requiredField": false
+            },
+            {
+              "fieldName": "end_date",
+              "fieldLabel": "End Date",
+              "fieldType": "date",
+              "defaultValue": "",
+              "requiredField": false
+            },
+            {
+              "fieldName": "category",
+              "fieldLabel": "Category",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "All"
+                  },
+                  {
+                    "option": "Emerging Tech"
+                  },
+                  {
+                    "option": "Product Principles and Building"
+                  },
+                  {
+                    "option": "PM Interview Prep"
+                  },
+                  {
+                    "option": "Personal Finance"
+                  },
+                  {
+                    "option": "Other"
+                  }
+                ]
+              },
+              "defaultValue": "All",
+              "requiredField": false
+            },
+            {
+              "fieldName": "author",
+              "fieldLabel": "Author (partial match \u2014 leave as 'All' for everyone)",
+              "fieldType": "text",
+              "placeholder": "e.g. Lenny   or leave as All",
+              "defaultValue": "All",
+              "requiredField": false
+            }
+          ]
+        }
+      },
+      "id": "85b17733-5adc-4362-b138-e0961e5e5294",
+      "name": "Newsletter Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        112
+      ],
+      "webhookId": "b88564f0-a38a-4f4f-9a44-71cd1cb90d80"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inp = $input.first().json;\nconst fmt = d => d.toISOString().slice(0,10);\nconst toG = d => d.replace(/-/g,'/');\nconst yest = new Date(Date.now()-86400000);\nconst today = new Date();\nconst rawS = inp.start_date ? String(inp.start_date).trim().slice(0,10) : '';\nconst rawE = inp.end_date   ? String(inp.end_date).trim().slice(0,10)   : '';\nconst s = rawS || fmt(yest);\nconst e = rawE || fmt(today);\n// gmail_before = end_date + 1 day (exclusive upper bound)\n// This means \"May 3 only\" \u2192 gmail_after=May3 before=May4 \u2192 correct\nconst eNextDay = fmt(new Date(new Date(e+'T00:00:00').getTime() + 86400000));\nconst category = (inp.category && String(inp.category).trim()) ? String(inp.category).trim() : 'All';\nconst author   = (inp.author   && String(inp.author).trim()  ) ? String(inp.author).trim()   : 'All';\nreturn [{json:{\n  source:'form',command:'/summarize',chat_id:'8641228015',\n  start_date:s,end_date:e,\n  gmail_after:toG(s),gmail_before:toG(eNextDay),\n  category:category,author:author\n}}];"
+      },
+      "id": "52e63c11-a10d-418f-8b22-051626495777",
+      "name": "Set Date Range",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/api/v1/data-tables/PWAXFSFmVIBZVLqJ/rows?limit=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "f05d2434-2b51-4caf-a498-4d497eafd63c",
+      "name": "Read Newsletter Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "BpAKg9ksPP86UvU8",
+          "name": "n8n API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Data Table API returns {data: [...rows]}\nconst rows = $input.first().json.data || [];\nif (rows.length === 0) return [{ json: { _empty: true } }];\nreturn rows.map(row => ({ json: row }));"
+      },
+      "id": "4ec8d8e0-9682-4848-92a3-2ee6df22ed68",
+      "name": "Parse Config Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.active }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7c47879-d772-44f9-a087-f2bdabf87029",
+      "name": "Filter Active Senders",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/1P9B1js3hpin5BgWbxjgfDbcUATJ3tTufD1jMaw9-LDE/values/Summaries%20Log!A:G?majorDimension=ROWS",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "31589e57-37c4-4afd-9dc5-8c779dc1ed63",
+      "name": "Read Summaries Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1104,
+        432
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ROlFLlzLJQRiS1Br",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const vals=$input.first().json.values||[];\nif(vals.length<2) return [{json:{seen_ids:[]}}];\nconst ids=vals.slice(1).map(r=>String(r[0]||'').trim()).filter(id=>id.length>0);\nreturn [{json:{seen_ids:ids}}];"
+      },
+      "id": "8171854c-7fd1-409d-9d95-aa2c712f121b",
+      "name": "Build Dedup Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        432
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2537e10d-3c59-43cb-86b6-4874de75d706",
+      "name": "Combine Config + Dedup",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1888,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all=$input.all();\nconst senders=all.filter(i=>i.json.sender_query && i.json.sender_query!=='__no_match__');\nconst dedupItem=all.find(i=>Array.isArray(i.json.seen_ids));\nconst seenIds=dedupItem?dedupItem.json.seen_ids:[];\nlet dateInfo={};\ntry{dateInfo=$('Set Date Range').first().json;}catch(e){}\nconst ga=dateInfo.gmail_after||'',gb=dateInfo.gmail_before||'';\nconst cid=dateInfo.chat_id||'8641228015';\n// If no real senders (all filtered out), return empty \u2192 Aggregate fires with 0 items\nif(senders.length===0) return [];\nreturn senders.map(s=>({json:{\n  sender_query:s.json.sender_query||'',\n  display_name:s.json.display_name||'',\n  category_hint:s.json.category_hint||'',\n  gmail_after:ga,gmail_before:gb,chat_id:cid,seen_ids:seenIds\n}}));"
+      },
+      "id": "ed581959-68c9-4d23-a080-5a940c5d0728",
+      "name": "Prep Sender Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "5038359a-3b0c-4831-b026-c4628c5f33a2",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2448,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "q": "={{ $json.sender_query+' in:anywhere after:'+$json.gmail_after+' before:'+$json.gmail_before }}"
+        },
+        "simple": false
+      },
+      "id": "9ae156f7-c173-47f1-b93d-8ca6b53c1458",
+      "name": "Fetch Gmail Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2720,
+        448
+      ],
+      "webhookId": "0ea3c006-13a1-4f51-ac78-7f5ff1f3afff",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "6Bq0cehYAQoC7Odu",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen=new Set(($('Build Dedup Array').first().json.seen_ids||[]).map(String));\nconst newItems=$input.all().filter(it=>!seen.has(String(it.json.id)));\nif(newItems.length>0) return newItems;\n// All emails already summarised \u2014 pass a sentinel to trigger the cached path\nreturn [{json:{_all_cached:true}}];"
+      },
+      "id": "881b98ec-e4d2-4281-a6c8-a7c9bbaccdf4",
+      "name": "Dedup: Skip Already Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const it = item.json;\n  // simple:false \u2192 html/text fields; simple:true (legacy) \u2192 body.content/snippet\n  let raw = it.html || it.text || it.body?.content || it.snippet || '';\n\n  // Extract \"view online\" URL BEFORE stripping \u2014 tightened to avoid unsubscribe/tracking URLs\n  const viewOnlineRe = /<a[^>]+href=[\"']([^\"']{10,})[\"'][^>]*>([\\s\\S]{0,200}?)<\\/a>/gi;\n  let viewOnlineUrl = '';\n  let m;\n  while ((m = viewOnlineRe.exec(raw)) !== null) {\n    const href = m[1];\n    const hrefLower = href.toLowerCase();\n    const txt = m[2].replace(/<[^>]+>/g,'').toLowerCase().trim();\n    // Must contain clear \"view online / read in browser\" text\n    if (!/view.{0,20}(?:online|browser|web)|read.{0,10}browser|web version/.test(txt)) continue;\n    // Must NOT be an unsubscribe, tracking, or utility link\n    if (/unsubscribe|unsub|optout|opt.out|manage|preferences|privacy|tracking|link\\.mail\\.|t\\.co\\/|click\\.|redirect/.test(hrefLower)) continue;\n    viewOnlineUrl = href;\n    break;\n  }\n\n  let b = raw\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi,' ')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi,' ')\n    .replace(/<[^>]+>/g,' ')\n    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/&quot;/g,'\"')\n    .replace(/\\s+/g,' ').trim().slice(0,12000);\n\n  return {json:{...it, clean_body:b, view_online_url:viewOnlineUrl}};\n});"
+      },
+      "id": "6807f9ff-c757-455c-9694-2e5d037a8338",
+      "name": "Strip HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({model:\"gpt-4.1\",temperature:0,response_format:{type:\"json_object\"},messages:[{role:\"system\",content:\"You are a newsletter summarizer. Your only job is to compress newsletters into structured summaries.\\n\\nRULES:\\n1. Summarize ONLY what is explicitly stated in the newsletter. Do NOT add facts from your training data.\\n2. If uncertain whether a claim is from the newsletter or your own knowledge, omit it.\\n3. If newsletter contradicts itself, include bullet: 'Note: conflicting statement about [topic].'\\n4. Surface the author's primary argument faithfully.\\n\\nOUTPUT FORMAT - return valid JSON only, no markdown:\\n{\\\"category\\\":\\\"<Emerging Tech|Product Principles and Building|PM Interview Prep|Personal Finance|Other>\\\",\\\"author_name\\\":\\\"<newsletter author or brand>\\\",\\\"date\\\":\\\"<date from email header>\\\",\\\"summary_bullets\\\":[\\\"<bullet 1>\\\",\\\"<bullet 2>\\\",\\\"<bullet 3>\\\"],\\\"worth_reading_in_full\\\":true_or_false,\\\"reading_reason\\\":\\\"<one sentence or empty string>\\\",\\\"substack_or_web_link\\\":\\\"<best available web link \u2014 check in this order: (1) any View-in-browser / Read-online / Read-this-email link at the TOP of the email, (2) Substack / Beehiiv / Ghost read-online link in footer, (3) any canonical article URL in footer. Prefer a direct article URL over the newsletter homepage. Empty string only if no web link exists at all.\\\"}\\n\\nCATEGORIES:\\n- Emerging Tech: AI, LLMs, developer tools, new platforms\\n- Product Principles and Building: product strategy, PMF, PM craft\\n- PM Interview Prep: interview frameworks, case studies, job search\\n- Personal Finance: investing, savings, income strategy\\n- Other: does not clearly fit above\\n\\nQUALITY: 3-5 bullets, each = one distinct self-contained insight. If promotional only: summary_bullets:[\\\"No substantive content.\\\"]\"},{role:\"user\",content:\"From: \"+($json.From||\"\")+\"\\nSubject: \"+($json.Subject||\"\")+\"\\nDate: \"+(new Date(parseInt($json.internalDate||'0')).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}))+\"\\nCategory hint: \"+($json.category_hint||\"none\")+\"\\n\\n\"+($json.clean_body||$json.snippet||\"\")}]}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bfe070e3-9b4d-484a-8ca0-487c0c318376",
+      "name": "OpenAI: Summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3568,
+        448
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "iqaaiWUpvWvVsGT3",
+          "name": "Chatgpt API Key for n8n"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const originals = $('Strip HTML').all();\nreturn $input.all().map((item, index) => {\n  const it = item.json;\n  const orig = originals[index]?.json || {};\n  let parsed;\n  try {\n    const raw = it.message?.content || (it.choices && it.choices[0]?.message?.content) || '{}';\n    parsed = JSON.parse(raw);\n  } catch(e) {\n    return {json:{error:true, error_msg:e.message, subject:orig.subject||orig.Subject||'', gmail_message_id:orig.id||''}};\n  }\n  const msgId = orig.id || '';\n\n  // Date: always prefer the email's actual date (reliable) over LLM-extracted date\n  let date = '';\n  if (orig.date) {\n    // simple:false gives ISO string\n    const d = new Date(orig.date);\n    if (!isNaN(d.getTime()) && d.getFullYear() > 1971) {\n      date = d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});\n    }\n  }\n  if (!date && orig.internalDate) {\n    // simple:true (legacy) gave epoch ms\n    const d = new Date(parseInt(orig.internalDate));\n    if (!isNaN(d.getTime()) && d.getFullYear() > 1971) {\n      date = d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});\n    }\n  }\n  // Fall back to LLM date only if we couldn't get a valid one above\n  if (!date) date = parsed.date || '';\n\n  // Author: simple:false gives from.value[0].name; simple:true gave From string\n  let authorFallback = '';\n  if (orig.from) {\n    if (typeof orig.from === 'string') {\n      authorFallback = orig.from.split('<')[0].trim().replace(/^\"(.*)\"$/, '$1');\n    } else if (orig.from.value && orig.from.value[0]) {\n      const f = orig.from.value[0];\n      authorFallback = f.name || f.address || '';\n    } else if (orig.from.text) {\n      authorFallback = orig.from.text.split('<')[0].trim().replace(/^\"(.*)\"$/, '$1');\n    }\n  } else if (orig.From) {\n    authorFallback = orig.From.split('<')[0].trim().replace(/^\"(.*)\"$/, '$1');\n  }\n\n  // Subject\n  const subject = orig.subject || orig.Subject || parsed.subject || '';\n\n  // Link: LLM first, then view_online_url fallback \u2014 but filter out obviously bad links\n  let llmLink = (parsed.substack_or_web_link || '').trim();\n  let fallbackLink = (orig.view_online_url || '').trim();\n\n  const isBadLink = (url) => {\n    if (!url) return true;\n    const u = url.toLowerCase();\n    return /unsubscribe|unsub|optout|opt.out|manage|preferences|disclosures|privacy\\.html|tracking|link\\.mail\\.|t\\.co\\/|click\\.|redirect/.test(u);\n  };\n\n  if (isBadLink(llmLink)) llmLink = '';\n  if (isBadLink(fallbackLink)) fallbackLink = '';\n  const webLink = llmLink || fallbackLink;\n\n  return {json:{\n    ...parsed,\n    author_name: parsed.author_name || authorFallback,\n    date: date,\n    gmail_message_id: msgId,\n    gmail_link: 'https://mail.google.com/mail/u/0/#inbox/' + msgId,\n    subject: subject,\n    category_hint: orig.category_hint || '',\n    substack_or_web_link: webLink\n  }};\n});"
+      },
+      "id": "bd03df0f-ca0f-40f8-aa56-ff34bef10c9e",
+      "name": "Parse OpenAI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "summaries",
+        "options": {}
+      },
+      "id": "2dd44248-639a-4041-8489-9d0d15ca5c85",
+      "name": "Aggregate All Summaries",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ORDER=['Emerging Tech','Product Principles and Building','PM Interview Prep','Personal Finance','Other'];\nconst cid='8641228015';\n\n// New summaries from Aggregate (via this node's direct input)\nconst newSummaries=($input.first().json.summaries||[]).filter(s=>!s.error&&!s._all_cached);\n\n// Cached summaries from Read Summaries Log (columns: [id,date,category,author,subject,summary,link])\nconst dateInfo=$('Set Date Range').first().json;\nconst startDate=new Date(dateInfo.start_date+'T00:00:00');\nconst endDate  =new Date(dateInfo.end_date  +'T23:59:59');\nconst catFilter   =String(dateInfo.category||'All').trim();\nconst authorFilter=String(dateInfo.author  ||'All').trim();\nconst allRows=($('Read Summaries Log').first().json.values||[]).slice(1);\nconst cachedSummaries=allRows.filter(r=>{\n  if(!r[0]) return false;\n  const d=new Date(r[1]||'');\n  if(isNaN(d.getTime())||d<startDate||d>endDate) return false;\n  if(catFilter!=='All'&&catFilter!==''){\n    if(String(r[2]||'').trim().toLowerCase()!==catFilter.toLowerCase()) return false;\n  }\n  if(authorFilter!=='All'&&authorFilter!==''){\n    if(!String(r[3]||'').trim().toLowerCase().includes(authorFilter.toLowerCase())) return false;\n  }\n  return true;\n}).map(r=>({\n  gmail_message_id:r[0]||'',\n  date:r[1]||'',\n  category:r[2]||'Other',\n  author_name:r[3]||'',\n  subject:r[4]||'',\n  summary_bullets:String(r[5]||'').split(' | ').filter(b=>b.trim()),\n  substack_or_web_link:r[6]||'',\n  gmail_link:r[0]?'https://mail.google.com/mail/u/0/#inbox/'+r[0]:'',\n  worth_reading_in_full:false,\n  reading_reason:'',\n  _from_cache:true\n}));\n\n// Merge: new takes priority; dedup by gmail_message_id\nconst seenIds=new Set(newSummaries.map(s=>s.gmail_message_id).filter(Boolean));\nconst seenCacheIds=new Set();\nconst uniqueCached=cachedSummaries.filter(s=>{\n  if(!s.gmail_message_id||seenIds.has(s.gmail_message_id)||seenCacheIds.has(s.gmail_message_id)) return false;\n  seenCacheIds.add(s.gmail_message_id);\n  return true;\n});\nconst sums=[...newSummaries,...uniqueCached];\n\nif(sums.length===0) return [{json:{message:'\\u{1F4ED} No newsletters found for this date range.',chat_id:cid,summaries:[]}}];\n\nconst grp={};\nfor(const s of sums){const c=s.category||'Other';if(!grp[c])grp[c]=[];grp[c].push(s);}\nconst esc=t=>String(t||'').replace(/([_*[\\]()~`>#+\\-=|{}.!])/g,'\\\\$1');\nconst ds=new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});\nconst HEADER='\\u{1F4EC} *Newsletter Digest \u2014 '+esc(ds)+'*\\n\\n';\nconst MAX=3900;\nconst blocks=[];\nfor(const cat of ORDER){\n  if(!grp[cat]) continue;\n  let first=true;\n  for(const s of grp[cat]){\n    let blk='';\n    if(first){blk+='*'+esc(cat)+'*\\n';first=false;}\n    blk+='\\n\\u{1F464} *'+esc(s.author_name||'Unknown')+'*';\n    if(s.date) blk+=' \u00b7 '+esc(s.date);\n    if(s._from_cache) blk+=' \\u{1F4BE}';\n    blk+='\\n';\n    for(const b of(s.summary_bullets||[])) blk+='  \u2022 '+esc(b)+'\\n';\n    if(s.worth_reading_in_full&&s.reading_reason) blk+='\\u{1F4D6} _'+esc(s.reading_reason)+'_\\n';\n    // Labeled links: article link (Substack/web) + Gmail app deep link\n    function linkLabel(url){\n      try{\n        const h=new URL(url).hostname.replace(/^www\\./,'');\n        if(h.includes('substack.com')) return 'Read on Substack';\n        if(h.includes('beehiiv.com'))  return 'Read on Beehiiv';\n        if(h.includes('medium.com'))   return 'Read on Medium';\n        if(h.includes('ghost.io')||h.includes('ghost.org')) return 'Read on Ghost';\n        return 'Read on '+h;\n      }catch(e){return 'Read online';}\n    }\n    let artLnk=s.substack_or_web_link||'';\n    if(artLnk.includes('mail.google.com')) artLnk=''; // skip gmail web URLs \u2014 shown via deep link instead\n    const gmLnk=s.gmail_message_id?'https://mail.google.com/mail/u/0/#inbox/'+s.gmail_message_id:'';\n    const lparts=[];\n    if(artLnk) lparts.push('['+esc(linkLabel(artLnk))+']('+artLnk+')');\n    if(gmLnk)  lparts.push('[Open in Gmail]('+gmLnk+')');\n    if(lparts.length) blk+=lparts.join(' \u00b7 ')+'\\n';\n    blocks.push(blk);\n  }\n}\nconst msgs=[];\nlet cur=HEADER;\nfor(const blk of blocks){\n  if(cur.length+blk.length>MAX&&cur!==HEADER){msgs.push(cur.trimEnd());cur=HEADER;}\n  cur+=blk;\n}\nif(cur!==HEADER) msgs.push(cur.trimEnd());\nif(msgs.length===0) msgs.push(HEADER+'No newsletters to show\\.');\nreturn msgs.map((msg,i)=>({json:{\n  message:msgs.length>1?msg+'\\n\\n_Part '+(i+1)+' of '+msgs.length+'_':msg,\n  chat_id:cid,\n  summaries:i===0?sums:[]\n}}));"
+      },
+      "id": "2433febf-390b-43d2-9a78-cf16a41006c5",
+      "name": "Format Telegram Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "id": "a09a7fbf-0024-4294-be2f-dd3668b11ccb",
+      "name": "Send Telegram Digest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3024,
+        -80
+      ],
+      "webhookId": "25e0cc37-81cd-4872-9d36-5d09c4f0c8e3",
+      "credentials": {
+        "telegramApi": {
+          "id": "y4s2p98UApVp0eSX",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "summaries",
+        "options": {}
+      },
+      "id": "9ab64d7f-598c-49cd-946e-97a4154539d5",
+      "name": "Split Out Summaries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3024,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3042d35c-6452-4648-a2c5-e3c93ec77e96",
+      "name": "Filter Error Items",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1P9B1js3hpin5BgWbxjgfDbcUATJ3tTufD1jMaw9-LDE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Summaries Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Gmail Message ID": "={{ $json.gmail_message_id }}",
+            "Date": "={{ $json.date }}",
+            "Category": "={{ $json.category }}",
+            "Author": "={{ $json.author_name }}",
+            "Subject": "={{ $json.subject }}",
+            "Summary": "={{ ($json.summary_bullets||[]).join(' | ') }}",
+            "Link": "={{ $json.substack_or_web_link || $json.gmail_link }}"
+          },
+          "schema": [
+            {
+              "id": "Gmail Message ID",
+              "displayName": "Gmail Message ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Author",
+              "displayName": "Author",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Link",
+              "displayName": "Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "20dc89e9-29c7-42d6-b1c5-018aa6147007",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3584,
+        240
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "VAWHJ1XYAI7A1uED",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## \u26a0\ufe0f One-time setup required\n\n**Replace `SHEET_ID_HERE`** in 3 nodes:\n- Read Newsletter Config\n- Read Summaries Log\n- Log to Google Sheets\n\nGet your Sheet ID from the URL:\n`https://docs.google.com/spreadsheets/d/**ID**/edit`\n\nSheet needs 2 tabs:\n**Newsletter Config** (cols: sender_query, display_name, category_hint, active)\n**Summaries Log** (cols: Gmail Message ID, Date, Category, Author, Subject, Summary, Link)",
+        "height": 260,
+        "width": 400,
+        "color": 3
+      },
+      "id": "f972bbae-3dff-422a-a151-3923d2a8482b",
+      "name": "\u26a0\ufe0f Setup: Replace SHEET_ID_HERE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        832,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Triggers\n**Telegram:** Send `/summarize` to @Abhinav\\_digest\\_bot\nWith dates: `/summarize 2026-04-01 2026-05-01`\nDefault: yesterday only\n\n**n8n UI:** Click Execute Workflow",
+        "width": 320,
+        "color": 4
+      },
+      "id": "c20e0dbb-d265-43ae-be94-19d2f4fee0db",
+      "name": "\ud83d\udccc Triggers",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Batch Loop\nOne sender at a time from config sheet.\nFetches Gmail \u2192 deduplicates \u2192 strips HTML \u2192 GPT-4.1 summary.\n\n**Loop-back:** Parse Response reconnects to Split In Batches.",
+        "height": 140,
+        "width": 340,
+        "color": 5
+      },
+      "id": "2b582977-f366-4e1b-883f-99c88beed4f2",
+      "name": "\ud83d\udccc Loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n// Read filter values from Set Date Range (accessible anywhere in the execution tree)\nconst dateInfo = $('Set Date Range').first().json;\nconst catFilter    = String(dateInfo.category || 'All').trim();\nconst authorFilter = String(dateInfo.author   || 'All').trim();\n\nconst filtered = items.filter(item => {\n  const senderCat  = String(item.json.category_hint || '').trim();\n  const senderName = String(item.json.display_name  || '').trim();\n  // Category filter (exact match, case-insensitive)\n  if (catFilter !== 'All' && catFilter !== '') {\n    if (senderCat.toLowerCase() !== catFilter.toLowerCase()) return false;\n  }\n  // Author filter (partial match, case-insensitive)\n  if (authorFilter !== 'All' && authorFilter !== '') {\n    if (!senderName.toLowerCase().includes(authorFilter.toLowerCase())) return false;\n  }\n  return true;\n});\n\n// If nothing matched, pass a sentinel so Aggregate still fires with 0 real results\nif (filtered.length === 0) {\n  return [{json:{_no_match:true, display_name:'', sender_query:'__no_match__', category_hint:'', gmail_after:'', gmail_before:'', seen_ids:[]}}];\n}\nreturn filtered;"
+      },
+      "id": "73feb841-04c6-4abf-84ac-9be582263320",
+      "name": "Filter by Category + Author",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "ae731c3c-b9fe-415b-b826-5a755dfa1f34",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7eb61ba9-6b8e-42a7-89cf-f3a1b5d60a76",
+      "name": "Any New Emails?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3140,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items=$input.all();\n// If 0 items (all-new case: IF false fires with nothing) \u2192 don't trigger downstream\nif(items.length===0) return [];\n// Sentinel arrived: return empty summaries wrapper for Format Telegram\nreturn [{json:{summaries:[],_all_cached:true}}];"
+      },
+      "id": "9de9c1af-01c3-46cb-a6f3-5811c931a4cb",
+      "name": "No New Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3140,
+        620
+      ]
+    }
+  ],
+  "connections": {
+    "Set Date Range": {
+      "main": [
+        [
+          {
+            "node": "Read Newsletter Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Summaries Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Newsletter Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Config Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Config Rows": {
+      "main": [
+        [
+          {
+            "node": "Filter Active Senders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Active Senders": {
+      "main": [
+        [
+          {
+            "node": "Filter by Category + Author",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Summaries Log": {
+      "main": [
+        [
+          {
+            "node": "Build Dedup Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dedup Array": {
+      "main": [
+        [
+          {
+            "node": "Combine Config + Dedup",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Config + Dedup": {
+      "main": [
+        [
+          {
+            "node": "Prep Sender Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Sender Batches": {
+      "main": [
+        [
+          {
+            "node": "Fetch Gmail Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Gmail Emails": {
+      "main": [
+        [
+          {
+            "node": "Dedup: Skip Already Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup: Skip Already Done": {
+      "main": [
+        [
+          {
+            "node": "Any New Emails?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip HTML": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Summarize": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenAI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenAI Response": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Summaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Summaries": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram Digest": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Out Summaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Summaries": {
+      "main": [
+        [
+          {
+            "node": "Filter Error Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Error Items": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Newsletter Form": {
+      "main": [
+        [
+          {
+            "node": "Set Date Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter by Category + Author": {
+      "main": [
+        [
+          {
+            "node": "Combine Config + Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any New Emails?": {
+      "main": [
+        [
+          {
+            "node": "Strip HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No New Emails": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {}
+}
